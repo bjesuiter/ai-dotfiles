@@ -99,9 +99,53 @@ refresh_fnm_env() {
   fi
 }
 
+locale_available() {
+  local wanted
+  wanted="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -d '-')"
+  locale -a 2>/dev/null | tr '[:upper:]' '[:lower:]' | tr -d '-' | grep -Fxq "$wanted"
+}
+
+generate_locale() {
+  local locale_name="$1"
+  local locale_pattern="${locale_name//./\\.}"
+
+  if locale_available "$locale_name"; then
+    log "Locale $locale_name already available"
+    return 0
+  fi
+
+  if [ -f /etc/locale.gen ]; then
+    if grep -Eq "^[#[:space:]]*${locale_pattern}[[:space:]]+UTF-8" /etc/locale.gen; then
+      run_as_root sed -i -E "s/^#?[[:space:]]*(${locale_pattern}[[:space:]]+UTF-8)/\\1/" /etc/locale.gen
+    else
+      printf '%s UTF-8\n' "$locale_name" | run_as_root tee -a /etc/locale.gen >/dev/null
+    fi
+  fi
+
+  run_as_root locale-gen "$locale_name"
+
+  if ! locale_available "$locale_name"; then
+    log "Failed to generate locale $locale_name"
+    return 1
+  fi
+
+  log "Generated locale $locale_name"
+}
+
+configure_locales() {
+  local desired_locale="${INIT_VSERV_LOCALE:-de_DE.UTF-8}"
+  local fallback_locale="en_US.UTF-8"
+
+  generate_locale "$desired_locale"
+
+  if [ "$desired_locale" != "$fallback_locale" ]; then
+    generate_locale "$fallback_locale"
+  fi
+}
+
 install_apt_packages() {
   run_as_root apt-get update -y
-  run_as_root apt-get install -y fish curl ca-certificates unzip xz-utils
+  run_as_root apt-get install -y fish curl ca-certificates unzip xz-utils locales
 }
 
 install_starship() {
@@ -208,6 +252,7 @@ main() {
   export DEBIAN_FRONTEND=noninteractive
 
   run_step apt_packages install_apt_packages
+  run_step locales configure_locales
   run_step starship install_starship
   run_step bun install_bun
   run_step fnm install_fnm
