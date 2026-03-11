@@ -157,6 +157,11 @@ install_starship() {
   curl -sS https://starship.rs/install.sh | sh -s -- -y
 }
 
+configure_starship() {
+  append_block_if_missing "$HOME/.config/starship.toml" "ai-dotfiles starship container" '[container]
+disabled = true'
+}
+
 install_bun() {
   if command -v bun >/dev/null 2>&1; then
     log "bun already installed"
@@ -254,6 +259,7 @@ main() {
   run_step apt_packages install_apt_packages
   run_step locales configure_locales
   run_step starship install_starship
+  run_step starship_config configure_starship
   run_step bun install_bun
   run_step fnm install_fnm
   run_step node_lts install_node_lts
